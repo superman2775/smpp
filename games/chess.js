@@ -8,7 +8,7 @@ class ChessWidget extends GameBase {
       black: { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟' }
     };
     this.difficultyLabels = ['', 'Easy', 'Medium', 'Hard', 'Expert', 'Master'];
-    this.newGame();
+    // Do NOT call this.newGame() here!
   }
 
   get title() { return "Chess++"; }
@@ -28,12 +28,17 @@ class ChessWidget extends GameBase {
     this.moveHistory = [];
     this.isThinking = false;
     this.isInCheck = { white: false, black: false };
-    this.difficulty = this.getOpt("difficulty") || 3;
+    // Only reference getOpt once widget is started
+    this.difficulty = this.getOpt ? (this.getOpt("difficulty") || 3) : 3;
     this.animText = "";
     this.animCount = 0;
   }
 
   onGameStart() {
+    this.newGame();
+  }
+
+  onGameReset() {
     this.newGame();
   }
 
@@ -345,11 +350,6 @@ class ChessWidget extends GameBase {
       ctx.fillText((i + 1) + ". " + this.moveHistory[i], mhx, mhy + 24 + i * 18);
     }
     ctx.restore();
-  }
-
-  // Restart
-  onGameReset() {
-    this.newGame();
   }
 }
 
