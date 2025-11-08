@@ -1,3 +1,4 @@
+//"i don't vibecode, chatgpt does" - super_man2775
 class ChessWidget extends GameBase {
     #board = [];
     #selectedSquare = null;
@@ -10,47 +11,40 @@ class ChessWidget extends GameBase {
         black: { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟' }
     };
     #checked = { white: false, black: false };
-    #statusMessage = "";
-    #castlingRights = { whiteK: true, whiteQ: true, blackK: true, blackQ: true };
-    #enPassant = null;
-    #halfmoveClock = 0;
-
+    //highscore is default zero
     defaultSettings() {
         return { hiScore: 0 };
     }
-
+    //this thing is called chess
     get title() { return "Chess"; }
+    //make it harder using the slider
     get options() {
         return [
-            GameOption.slider("difficulty", "Bot Difficulty", 10, 50, 30)
+            GameOption.slider("difficulty", "Bot Difficulty", 100, 1000, 500, 100)
         ];
     }
-
-    // Always returns an integer in [1,10]
+    //calculate difficulty
     #getDifficulty() {
-        return Math.min(10, Math.max(1, Math.round((this.getOpt("difficulty") - 10) / 4) + 1));
+        return Math.max(1, Math.min(10, Math.round(Number(this.getOpt("difficulty")) / 100)));
     }
-
-    // Always returns integer depth [1,5], scaling with difficulty
+    //different difficulties
     #getBotDepth() {
-        let diff = this.#getDifficulty();
-        // Difficulty 1: 1, Difficulty 3: 2, Difficulty 5: 3, Difficulty 7: 4, Difficulty 9-10: 5
-        return Math.max(1, Math.min(5, Math.round((diff - 1) * 0.5 + 1)));
+        const d = this.#getDifficulty();
+        switch (d) {
+            case 1: return 1;
+            case 2: return 2;
+            case 3: return 3;
+            case 4: return 4;
+            case 5: return 5;
+            case 6: return 6;
+            case 7: return 7;
+            case 8: return 8;
+            case 9: return 9;
+            case 10: return 10;
+            default: return 3;
+        }
     }
-
-    #calculateScore(moves) {
-        let difficulty = this.#getDifficulty();
-        let norm = Math.max(moves, 2);
-        let raw = 100 * (difficulty / 10) * (20 / norm);
-        return Math.floor(raw);
-    }
-
-    createHiScoreString() {
-        return this.settings.hiScore > 0
-            ? `Score: ${this.settings.hiScore}/100`
-            : "No victories yet";
-    }
-
+    //initialize the game
     async onGameStart() {
         this.#initBoard();
         this.#currentPlayer = 'white';
@@ -59,12 +53,8 @@ class ChessWidget extends GameBase {
         this.#moveCount = 0;
         this.score = 0;
         this.#checked = { white: false, black: false };
-        this.#statusMessage = "";
-        this.#castlingRights = { whiteK: true, whiteQ: true, blackK: true, blackQ: true };
-        this.#enPassant = null;
-        this.#halfmoveClock = 0;
     }
-
+    //put the pieces on the board
     #initBoard() {
         this.#board = Array(8).fill(null).map(() => Array(8).fill(null));
         const backRow = ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'];
@@ -75,33 +65,49 @@ class ChessWidget extends GameBase {
             this.#board[7][i] = { type: backRow[i], color: 'white', moved: false };
         }
     }
-
+    //build the board
     onGameDraw(ctx, dt) {
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(0, 0, 300, 300);
+        ctx.clearRect(0, 0, 300, 300);
         for (let row = 0; row < 8; row++) for (let col = 0; col < 8; col++) {
             let x = col * this.#squareSize, y = row * this.#squareSize;
-            let isLight = (row + col) % 2 === 0;
-            ctx.fillStyle = isLight ? '#f0d9b5' : '#b58863';
+
+            //theme based colors before GTA VI (i feel so smart now but chatgpt did it)
+            let baseColor = ((row + col) % 2 === 0)
+                ? getThemeVar("--color-base01")
+                : getThemeVar("--color-base03");
+
+            //make the squares
+            ctx.fillStyle = baseColor;
             ctx.fillRect(x, y, this.#squareSize, this.#squareSize);
+
             let piece = this.#board[row][col];
-            if (piece && piece.type === "king" && this.#checked[piece.color])
-                ctx.fillStyle = "rgba(255,64,64,0.4)", ctx.fillRect(x, y, this.#squareSize, this.#squareSize);
-            if (this.#selectedSquare && this.#selectedSquare[0] === row && this.#selectedSquare[1] === col)
-                ctx.fillStyle = "rgba(255,255,0,0.4)", ctx.fillRect(x, y, this.#squareSize, this.#squareSize);
+
+            //if king almost ded -> make square red (this has a name but idk how to play chess)
+            if (piece && piece.type === "king" && this.#checked[piece.color]) {
+                ctx.fillStyle = "rgba(255,0,0,0.5)";
+                ctx.fillRect(x, y, this.#squareSize, this.#squareSize);
+            }
+            //click on a piece to make it this color
+            else if (this.#selectedSquare && this.#selectedSquare[0] === row && this.#selectedSquare[1] === col) {
+                ctx.fillStyle = "rgba(255,255,0,0.4)";
+                ctx.fillRect(x, y, this.#squareSize, this.#squareSize);
+            }
+
+            //give the pieces colors yay
             if (piece) {
-                ctx.fillStyle = piece.color == "white" ? "#fff" : "#000";
+                if (piece.color === "white") {
+                    ctx.fillStyle = "#fff";
+                } else {
+                    ctx.fillStyle = getThemeVar("--color-base02");
+                }
                 ctx.font = '28px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(this.#pieceSymbols[piece.color][piece.type], x + this.#squareSize / 2, y + this.#squareSize / 2 + 2);
             }
         }
-        ctx.fillStyle = "#fff"; ctx.font = "12px Arial"; ctx.textAlign = "left";
-        ctx.fillText(this.#isThinking ? "Bot thinking..." : this.#statusMessage || (this.#currentPlayer === "white" ? "Your turn" : "Bot's turn"), 5, 290);
-        ctx.textAlign = "right"; ctx.fillText(`Moves: ${this.#moveCount}`, 295, 290);
     }
-
+    //handle mouse clicks
     async onMouse(e) {
         if (this.#currentPlayer !== 'white' || this.#isThinking) return;
         const rect = this.canvas.getBoundingClientRect();
@@ -114,7 +120,7 @@ class ChessWidget extends GameBase {
         if (row < 0 || row >= 8 || col < 0 || col >= 8) return;
         this.#handleSquareClick(row, col);
     }
-
+    //process clicks
     #handleSquareClick(row, col) {
         if (this.#selectedSquare) {
             let [sRow, sCol] = this.#selectedSquare;
@@ -131,7 +137,7 @@ class ChessWidget extends GameBase {
             } else this.#selectedSquare = null;
         } else if (this.#board[row][col] && this.#board[row][col].color === 'white') this.#selectedSquare = [row, col];
     }
-
+    //validate moves (very complicated, dont understand it either)
     #isValidMove(fromRow, fromCol, toRow, toCol) {
         if (![fromRow, fromCol, toRow, toCol].every(x => x >= 0 && x < 8)) return false;
         const piece = this.#board[fromRow][fromCol];
@@ -139,8 +145,8 @@ class ChessWidget extends GameBase {
         if (fromRow === toRow && fromCol === toCol) return false;
         const target = this.#board[toRow][toCol];
         if (target && target.color === piece.color) return false;
+        if (target && target.type === "king") return false;
         const rowDiff = toRow - fromRow, colDiff = toCol - fromCol;
-        // Pawn moves
         if (piece.type === 'pawn') {
             const dir = piece.color === "white" ? -1 : 1;
             if (colDiff === 0 && !target)
@@ -167,7 +173,7 @@ class ChessWidget extends GameBase {
         }
         return false;
     }
-
+    //check if path is clear
     #isPathClear(fromRow, fromCol, toRow, toCol) {
         if (
             fromRow < 0 || fromRow > 7 ||
@@ -188,38 +194,38 @@ class ChessWidget extends GameBase {
         }
         return true;
     }
-
+    //simulate move to see if king is in check
     #wouldLeaveKingInCheck(fromR, fromC, toR, toC, color) {
         let board = this.#copyBoard(this.#board), piece = board[fromR][fromC];
         board[toR][toC] = piece; board[fromR][fromC] = null;
         if (piece && piece.type === "pawn" && (toR === 0 || toR === 7)) piece.type = "queen";
         return this.#isKingInCheck(board, color);
     }
-
+    //make a copy of the board
     #copyBoard(board) {
         return board.map(row => row.map(piece => (piece ? { ...piece } : null)));
     }
-
+    //execute the move
     #makeMove(fromRow, fromCol, toRow, toCol) {
         const piece = this.#board[fromRow][fromCol];
         this.#board[toRow][toCol] = piece;
         this.#board[fromRow][fromCol] = null;
         if (piece.type === "pawn" && (toRow === 0 || toRow === 7)) piece.type = "queen";
     }
-
+    //find the king on the board
     #findKing(board, color) {
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++)
             if (board[r][c] && board[r][c].color === color && board[r][c].type === "king") return [r, c];
         return null;
     }
-
+    //check if king is almost ded
     #isKingInCheck(board, color) {
         const kingPos = this.#findKing(board, color);
         if (!kingPos) return false;
         const [r, c] = kingPos;
         return this.#isSquareAttacked(board, r, c, color === "white" ? "black" : "white");
     }
-
+    //check if square is attacked
     #isSquareAttacked(board, row, col, byColor) {
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
             const piece = board[r][c];
@@ -228,7 +234,7 @@ class ChessWidget extends GameBase {
         }
         return false;
     }
-
+    //can a piece attack a square
     #canPieceAttack(board, fromRow, fromCol, toRow, toCol, piece = null) {
         if (
             fromRow < 0 || fromRow > 7 ||
@@ -250,36 +256,23 @@ class ChessWidget extends GameBase {
         if (piece.type === "king") return Math.abs(rowDiff) <= 1 && Math.abs(colDiff) <= 1;
         return false;
     }
-
+    //update king almost ded status
     #updateCheckStatus() {
         this.#checked.white = this.#isKingInCheck(this.#board, "white");
         this.#checked.black = this.#isKingInCheck(this.#board, "black");
     }
-
+    //check for end of game or if bot needs to do stuff
     #checkEndOrBot(player) {
         const moves = this.#getAllValidMoves(player || this.#currentPlayer);
         const checked = this.#checked[player || this.#currentPlayer];
         if (!moves.length) {
-            if (checked) {
-                this.#statusMessage = (player === "white")
-                    ? "Checkmate! Bot wins!"
-                    : "Checkmate! You win!";
-                // Only update high score on user win
-                if (player === "black") {
-                    let score = this.#calculateScore(this.#moveCount);
-                    if (score > (this.settings?.hiScore ?? 0)) {
-                        this.setSetting('hiScore', score);
-                    }
-                }
-            } else {
-                this.#statusMessage = "Stalemate!";
-            }
             setTimeout(() => this.stopGame(), 1200);
             return;
         }
-        if (player === "black" || (!player && this.#currentPlayer === "black")) setTimeout(() => this.#botMove(), 325);
+        if (player === "black" || (!player && this.#currentPlayer === "black"))
+            setTimeout(() => this.#botMove(), 325);
     }
-
+    //get all valid moves
     #getAllValidMoves(color) {
         let moves = [];
         for (let r = 0; r < 8; ++r)
@@ -290,30 +283,36 @@ class ChessWidget extends GameBase {
                             if (this.#isValidMove(r, c, toR, toC)) moves.push({ fromR: r, fromC: c, toR, toC });
         return moves;
     }
-
-    // Aggressive evaluation, as before
+    //look at the board and think
     #evaluate(board, color) {
-        let score = 0, pieceVals = { pawn: 100, knight: 320, bishop: 330, rook: 500, queen: 900, king: 0 };
+        let score = 0;
+        let pieceVals = { pawn: 100, knight: 325, bishop: 340, rook: 500, queen: 900, king: 0 };
         let myColor = color, enemyColor = color === "white" ? "black" : "white";
+        let kingPosEnemy = this.#findKing(board, enemyColor);
+
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
             let p = board[r][c]; if (!p) continue;
-            let val = pieceVals[p.type], mod = (p.color === myColor ? 1 : -1);
-            score += val * mod;
-
-            // Attack incentive: reward direct attacks on enemy pieces
+            let mod = (p.color === myColor ? 1 : -1);
+            score += pieceVals[p.type] * mod;
             if (p.color === myColor) {
-                for (let toR = 0; toR < 8; ++toR) for (let toC = 0; toC < 8; ++toC) {
-                    if (board[toR][toC] && board[toR][toC].color === enemyColor && this.#canPieceAttack(board, r, c, toR, toC, p)) {
-                        score += 30 * mod;
+                for (let toR = 0; toR < 8; ++toR)
+                for (let toC = 0; toC < 8; ++toC) {
+                    let enemy = board[toR][toC];
+                    if (enemy && enemy.color === enemyColor && this.#canPieceAttack(board, r, c, toR, toC, p)) {
+                        score += (pieceVals[enemy.type] * 0.8 + 40) * mod;
+                        if (enemy.type === "king") score += 600 * mod;
                     }
                 }
             }
         }
-        // Bonus for check on enemy king
-        let enemyKing = this.#findKing(board, enemyColor);
-        if (enemyKing && this.#isSquareAttacked(board, enemyKing[0], enemyKing[1], myColor)) score += 50;
-
-        // Mobility incentive
+        if (kingPosEnemy) {
+            for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+                let rr = kingPosEnemy[0] + dr, cc = kingPosEnemy[1] + dc;
+                if (rr >= 0 && rr < 8 && cc >= 0 && cc < 8 && board[rr][cc] && board[rr][cc].color === myColor) {
+                    score += 60;
+                }
+            }
+        }
         let myMoves = 0, enemyMoves = 0;
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
             if (board[r][c] && board[r][c].color === myColor)
@@ -323,24 +322,40 @@ class ChessWidget extends GameBase {
                 for (let toR = 0; toR < 8; toR++) for (let toC = 0; toC < 8; toC++)
                     if (this.#canPieceAttack(board, r, c, toR, toC)) enemyMoves++;
         }
-        score += 3 * (myMoves - enemyMoves);
-
-        // Mate incentives
+        score += 2 * (myMoves - enemyMoves);
         let whiteMoves = this.#getAllValidMoves("white");
         let blackMoves = this.#getAllValidMoves("black");
-        if (!blackMoves.length && this.#isKingInCheck(board, "black")) score += 100000;
-        if (!whiteMoves.length && this.#isKingInCheck(board, "white")) score -= 100000;
-
+        if (!blackMoves.length && this.#isKingInCheck(board, "black")) score += 1000000;
+        if (!whiteMoves.length && this.#isKingInCheck(board, "white")) score -= 1000000;
         return score;
     }
-
+    //determine bot move
     #getBotMove() {
         const depth = this.#getBotDepth();
-        const move = this.#minimax(this.#copyBoard(this.#board), 'black', depth, -Infinity, Infinity).move;
-        return move;
-    }
+        const difficulty = this.#getDifficulty();
+        const moves = this.#getAllValidMoves('black');
 
+        if (difficulty === 1 && moves.length > 0) {
+            return moves[Math.floor(Math.random() * moves.length)] || null;
+        } else if (difficulty === 2 && moves.length > 0) {
+            let bestScore = -Infinity, bestMove = moves[0];
+            for (const move of moves) {
+                const testBoard = this.#copyBoard(this.#board);
+                const p = testBoard[move.fromR][move.fromC];
+                testBoard[move.toR][move.fromC] = null;
+                testBoard[move.toR][move.toC] = p;
+                if (p.type === "pawn" && (move.toR === 0 || move.toR === 7)) p.type = "queen";
+                let score = this.#evaluate(testBoard, "black");
+                if (score > bestScore) { bestScore = score; bestMove = move; }
+            }
+            return bestMove;
+        } else {
+            return this.#minimax(this.#copyBoard(this.#board), 'black', depth, -Infinity, Infinity).move;
+        }
+    }
+    //minimax algorithm with alpha-beta pruning (very smart thing made by chatgpt)
     #minimax(board, turn, depth, alpha, beta) {
+        let pieceVals = { pawn: 100, knight: 325, bishop: 340, rook: 500, queen: 900, king: 0 };
         if (depth === 0) return { score: this.#evaluate(board, 'black') };
         let moves = [];
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++)
@@ -348,6 +363,12 @@ class ChessWidget extends GameBase {
                 for (let toR = 0; toR < 8; ++toR)
                     for (let toC = 0; toC < 8; ++toC)
                         if (this.#isValidMove(r, c, toR, toC)) moves.push({ fromR: r, fromC: c, toR, toC });
+        moves = moves.sort((a, b) => {
+            const ca = board[a.toR][a.toC], cb = board[b.toR][b.toC];
+            let va = ca && ca.color !== turn ? (pieceVals[ca.type] || 0) : 0;
+            let vb = cb && cb.color !== turn ? (pieceVals[cb.type] || 0) : 0;
+            return vb - va;
+        });
         if (!moves.length) return { score: this.#evaluate(board, 'black') };
         let bestMove = null, bestScore = turn === 'black' ? -Infinity : Infinity;
         for (let move of moves) {
@@ -366,7 +387,7 @@ class ChessWidget extends GameBase {
         }
         return { score: bestScore, move: bestMove };
     }
-
+    //bot moves shit
     #botMove() {
         this.#isThinking = true;
         setTimeout(() => {
@@ -385,3 +406,4 @@ class ChessWidget extends GameBase {
 }
 
 registerWidget(new ChessWidget());
+//yippie its the end now i can stop pretending to code and eat a whopper!
