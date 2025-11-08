@@ -1,356 +1,325 @@
-// games/chess.js
-
+//i didnt vibecode this, chatgpt vibecoded this - super_man2775
 class ChessWidget extends GameBase {
-  constructor() {
-    super();
-    this.pieceSymbols = {
-      white: { king: '♔', queen: '♕', rook: '♖', bishop: '♗', knight: '♘', pawn: '♙' },
-      black: { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟' }
+    #board = [];
+    #selectedSquare = null;
+    #currentPlayer = 'white';
+    #isThinking = false;
+    #moveCount = 0;
+    #squareSize = 37.5; // 300px canvas / 8 squares
+    #pieceSymbols = {
+        white: { king: '♔', queen: '♕', rook: '♖', bishop: '♗', knight: '♘', pawn: '♙' },
+        black: { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟' }
     };
-    this.difficultyLabels = ['', 'Easy', 'Medium', 'Hard', 'Expert', 'Master'];
-    // Do NOT call this.newGame() here!
-  }
-
-  get title() { return "Chess++"; }
-  get icon() { return "♔"; }
-  get description() { return "Play chess vs the bot!"; }
-  get options() {
-    return [
-      GameOption.slider("difficulty", "AI Difficulty:", 1, 5, 3),
-    ];
-  }
-
-  newGame() {
-    this.board = this.initializeBoard();
-    this.selectedSquare = null;
-    this.currentPlayer = "white";
-    this.gameStatus = "playing";
-    this.moveHistory = [];
-    this.isThinking = false;
-    this.isInCheck = { white: false, black: false };
-    // Only reference getOpt once widget is started
-    this.difficulty = this.getOpt ? (this.getOpt("difficulty") || 3) : 3;
-    this.animText = "";
-    this.animCount = 0;
-  }
-
-  onGameStart() {
-    this.newGame();
-  }
-
-  onGameReset() {
-    this.newGame();
-  }
-
-  // Board setup (8x8)
-  initializeBoard() {
-    const b = Array(8).fill(null).map(() => Array(8).fill(null));
-    for (let i = 0; i < 8; i++) {
-      b[1][i] = { type: 'pawn', color: 'black' };
-      b[6][i] = { type: 'pawn', color: 'white' };
+    #lastClickPos = null;
+    //this is the title
+    get title() {
+        return "Chess";
     }
-    const backRow = ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'];
-    for (let i = 0; i < 8; i++) {
-      b[0][i] = { type: backRow[i], color: 'black' };
-      b[7][i] = { type: backRow[i], color: 'white' };
+    //this is the difficulty slider
+    get options() {
+        return [
+            GameOption.slider("difficulty", "Bot Difficulty", 10, 50, 30)
+        ];
     }
-    return b;
-  }
-
-  // Find King position for check
-  findKing(board, color) {
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-      const p = board[r][c];
-      if (p && p.type === "king" && p.color === color) return [r, c];
+    //i aint documenting the rest for now cuz i am bored
+    async onGameStart() {
+        this.#initBoard();
+        this.#currentPlayer = 'white';
+        this.#selectedSquare = null;
+        this.#isThinking = false;
+        this.#moveCount = 0;
+        this.score = 0;
     }
-    return null;
-  }
 
-  // Helper for square under attack
-  isSquareUnderAttack(board, row, col, attackerColor) {
-    for (let fr = 0; fr < 8; fr++) for (let fc = 0; fc < 8; fc++) {
-      const p = board[fr][fc];
-      if (p && p.color === attackerColor)
-        if (this.canPieceAttack(board, fr, fc, row, col)) return true;
-    }
-    return false;
-  }
-
-  canPieceAttack(board, fr, fc, tr, tc) {
-    const p = board[fr][fc]; if (!p) return false;
-    const rd = tr - fr; const cd = tc - fc;
-    if (p.type === 'pawn') {
-      const dir = p.color === 'white' ? -1 : 1;
-      return Math.abs(cd) === 1 && rd === dir;
-    }
-    if (p.type === 'rook')   return (rd === 0 || cd === 0) && this.isPathClear(board, fr, fc, tr, tc);
-    if (p.type === 'knight') return (Math.abs(rd) === 2 && Math.abs(cd) === 1) || (Math.abs(rd) === 1 && Math.abs(cd) === 2);
-    if (p.type === 'bishop') return Math.abs(rd) === Math.abs(cd) && this.isPathClear(board, fr, fc, tr, tc);
-    if (p.type === 'queen')  return ((rd === 0 || cd === 0) || Math.abs(rd) === Math.abs(cd)) && this.isPathClear(board, fr, fc, tr, tc);
-    if (p.type === 'king')   return Math.abs(rd) <= 1 && Math.abs(cd) <= 1;
-    return false;
-  }
-
-  isPathClear(board, fr, fc, tr, tc) {
-    const rs = tr > fr ? 1 : tr < fr ? -1 : 0;
-    const cs = tc > fc ? 1 : tc < fc ? -1 : 0;
-    let r = fr + rs, c = fc + cs;
-    while (r !== tr || c !== tc) {
-      if (board[r][c]) return false;
-      r += rs; c += cs;
-    }
-    return true;
-  }
-
-  isKingInCheck(board, color) {
-    const k = this.findKing(board, color); if (!k) return false;
-    const opp = color === 'white' ? "black" : "white";
-    return this.isSquareUnderAttack(board, k[0], k[1], opp);
-  }
-
-  wouldMoveLeaveKingInCheck(board, fr, fc, tr, tc, color) {
-    const test = board.map(row => [...row]);
-    test[tr][tc] = test[fr][fc];
-    test[fr][fc] = null;
-    return this.isKingInCheck(test, color);
-  }
-
-  movePiece(fr, fc, tr, tc, board) {
-    const nb = board.map(row => [...row]);
-    let piece = nb[fr][fc];
-    if (piece.type === 'pawn' && (tr === 0 || tr === 7)) piece = { ...piece, type: 'queen' }; // Promote
-    nb[tr][tc] = piece;
-    nb[fr][fc] = null;
-    const from = String.fromCharCode(97 + fc) + (8 - fr);
-    const to = String.fromCharCode(97 + tc) + (8 - tr);
-    return { newBoard: nb, from, to, piece };
-  }
-
-  getAllValidMoves(board, color) {
-    const moves = [];
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-      const p = board[r][c];
-      if (p && p.color === color)
-        for (let tr = 0; tr < 8; tr++)
-          for (let tc = 0; tc < 8; tc++)
-            if (this.isValidMoveForBoard(board, r, c, tr, tc, color))
-              moves.push({ fromRow: r, fromCol: c, toRow: tr, toCol: tc });
-    }
-    return moves;
-  }
-
-  isValidMoveForBoard(board, fr, fc, tr, tc, player) {
-    const p = board[fr][fc]; if (!p || p.color !== player) return false;
-    const t = board[tr][tc];
-    if (t && t.color === p.color) return false;
-    const rd = tr - fr, cd = tc - fc;
-    let valid = false;
-    if (p.type === 'pawn') {
-      const d = p.color === 'white' ? -1 : 1;
-      if (cd === 0 && !t) {
-        if (rd === d) valid = true;
-        if (((fr === 6 && p.color === 'white') || (fr === 1 && p.color === 'black')) && rd === d * 2 && !board[fr + d][fc]) valid = true;
-      }
-      if (Math.abs(cd) === 1 && rd === d && t) valid = true;
-    }
-    if (p.type === 'rook')   valid = (rd === 0 || cd === 0) && this.isPathClear(board, fr, fc, tr, tc);
-    if (p.type === 'knight') valid = (Math.abs(rd) === 2 && Math.abs(cd) === 1) || (Math.abs(rd) === 1 && Math.abs(cd) === 2);
-    if (p.type === 'bishop') valid = Math.abs(rd) === Math.abs(cd) && this.isPathClear(board, fr, fc, tr, tc);
-    if (p.type === 'queen')  valid = ((rd === 0 || cd === 0) || Math.abs(rd) === Math.abs(cd)) && this.isPathClear(board, fr, fc, tr, tc);
-    if (p.type === 'king')   valid = Math.abs(rd) <= 1 && Math.abs(cd) <= 1;
-    if (!valid) return false;
-    return !this.wouldMoveLeaveKingInCheck(board, fr, fc, tr, tc, player);
-  }
-
-  // Show moves when user clicks
-  isValidMove(fr, fc, tr, tc) {
-    return this.isValidMoveForBoard(this.board, fr, fc, tr, tc, this.currentPlayer);
-  }
-
-  evaluatePosition(board) {
-    const pieceValues = { pawn: 1, knight: 3, bishop: 3, rook: 5, queen: 9, king: 0 };
-    let score = 0;
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-      const p = board[r][c]; if (p) {
-        const v = pieceValues[p.type];
-        let bonus = 0;
-        if (this.difficulty >= 3) {
-          if (p.type === 'pawn')
-            bonus = p.color === "black" ? r * 0.1 : (7 - r) * 0.1;
-          else if (p.type === 'knight' || p.type === 'bishop')
-            bonus = (7 - (Math.abs(3.5 - r) + Math.abs(3.5 - c))) * 0.05;
+    #initBoard() {
+        this.#board = Array(8).fill(null).map(() => Array(8).fill(null));
+        
+        const backRow = ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'];
+        for (let i = 0; i < 8; i++) {
+            this.#board[0][i] = { type: backRow[i], color: 'black' };
+            this.#board[1][i] = { type: 'pawn', color: 'black' };
+            this.#board[6][i] = { type: 'pawn', color: 'white' };
+            this.#board[7][i] = { type: backRow[i], color: 'white' };
         }
-        const total = v + bonus;
-        score += p.color === "black" ? total : -total;
-      }
     }
-    return score;
-  }
 
-  makeBotMove() {
-    if (this.isThinking || this.gameStatus !== 'playing') return;
-    this.isThinking = true;
-    setTimeout(() => {
-      const validMoves = this.getAllValidMoves(this.board, "black");
-      if (validMoves.length === 0) {
-        const inCheck = this.isKingInCheck(this.board, "black");
-        this.gameStatus = inCheck ? "checkmate-white" : "stalemate";
-        this.isThinking = false;
-        return;
-      }
-      let bestMove = null;
-      if (this.difficulty === 1) bestMove = validMoves[Math.floor(Math.random() * validMoves.length)];
-      else {
+    onGameDraw(ctx, deltaTime) {
+        // Clear canvas
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, 300, 300);
+
+        // Draw board squares
+        for (let row = 0; row < 8; row++) {
+            for (let col = 0; col < 8; col++) {
+                const x = col * this.#squareSize;
+                const y = row * this.#squareSize;
+                const isLight = (row + col) % 2 === 0;
+                
+                ctx.fillStyle = isLight ? '#f0d9b5' : '#b58863';
+                ctx.fillRect(x, y, this.#squareSize, this.#squareSize);
+
+                // Highlight selected square
+                if (this.#selectedSquare && 
+                    this.#selectedSquare[0] === row && 
+                    this.#selectedSquare[1] === col) {
+                    ctx.fillStyle = 'rgba(255, 255, 0, 0.4)';
+                    ctx.fillRect(x, y, this.#squareSize, this.#squareSize);
+                }
+
+                // Draw piece
+                const piece = this.#board[row][col];
+                if (piece) {
+                    ctx.fillStyle = piece.color === 'white' ? '#ffffff' : '#000000';
+                    ctx.font = '28px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(
+                        this.#pieceSymbols[piece.color][piece.type],
+                        x + this.#squareSize / 2,
+                        y + this.#squareSize / 2 + 2
+                    );
+                }
+            }
+        }
+
+        // Draw current player indicator
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(
+            this.#isThinking ? 'Bot thinking...' : 
+            `${this.#currentPlayer === 'white' ? 'Your' : "Bot's"} turn`,
+            5, 290
+        );
+
+        // Draw move count as score
+        ctx.textAlign = 'right';
+        ctx.fillText(`Moves: ${this.#moveCount}`, 295, 290);
+    }
+
+    async onMouse(e) {
+        if (this.#currentPlayer !== 'white' || this.#isThinking) return;
+
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const col = Math.floor(x / this.#squareSize);
+        const row = Math.floor(y / this.#squareSize);
+
+        if (row < 0 || row >= 8 || col < 0 || col >= 8) return;
+
+        this.#handleSquareClick(row, col);
+    }
+
+    #handleSquareClick(row, col) {
+        if (this.#selectedSquare) {
+            const [sRow, sCol] = this.#selectedSquare;
+            
+            if (this.#isValidMove(sRow, sCol, row, col)) {
+                this.#makeMove(sRow, sCol, row, col);
+                this.#selectedSquare = null;
+                this.#currentPlayer = 'black';
+                this.#moveCount++;
+                this.score = this.#moveCount;
+                
+                // Check for game over
+                if (this.#isGameOver('black')) {
+                    setTimeout(() => this.stopGame(), 500);
+                    return;
+                }
+                
+                // Trigger bot move
+                setTimeout(() => this.#botMove(), 800);
+            } else if (this.#board[row][col] && this.#board[row][col].color === 'white') {
+                this.#selectedSquare = [row, col];
+            } else {
+                this.#selectedSquare = null;
+            }
+        } else if (this.#board[row][col] && this.#board[row][col].color === 'white') {
+            this.#selectedSquare = [row, col];
+        }
+    }
+
+    #isValidMove(fromRow, fromCol, toRow, toCol) {
+        const piece = this.#board[fromRow][fromCol];
+        if (!piece || piece.color !== this.#currentPlayer) return false;
+        
+        const target = this.#board[toRow][toCol];
+        if (target && target.color === piece.color) return false;
+        
+        const rowDiff = toRow - fromRow;
+        const colDiff = toCol - fromCol;
+        
+        // Pawn moves
+        if (piece.type === 'pawn') {
+            const dir = piece.color === 'white' ? -1 : 1;
+            if (colDiff === 0 && !target) {
+                if (rowDiff === dir) return true;
+                if ((fromRow === 6 && piece.color === 'white' || fromRow === 1 && piece.color === 'black') &&
+                    rowDiff === dir * 2 && !this.#board[fromRow + dir][fromCol]) return true;
+            }
+            if (Math.abs(colDiff) === 1 && rowDiff === dir && target) return true;
+            return false;
+        }
+        
+        // Rook moves
+        if (piece.type === 'rook') {
+            if (rowDiff === 0 || colDiff === 0) {
+                return this.#isPathClear(fromRow, fromCol, toRow, toCol);
+            }
+            return false;
+        }
+        
+        // Knight moves
+        if (piece.type === 'knight') {
+            return (Math.abs(rowDiff) === 2 && Math.abs(colDiff) === 1) ||
+                   (Math.abs(rowDiff) === 1 && Math.abs(colDiff) === 2);
+        }
+        
+        // Bishop moves
+        if (piece.type === 'bishop') {
+            if (Math.abs(rowDiff) === Math.abs(colDiff)) {
+                return this.#isPathClear(fromRow, fromCol, toRow, toCol);
+            }
+            return false;
+        }
+        
+        // Queen moves
+        if (piece.type === 'queen') {
+            if (rowDiff === 0 || colDiff === 0 || Math.abs(rowDiff) === Math.abs(colDiff)) {
+                return this.#isPathClear(fromRow, fromCol, toRow, toCol);
+            }
+            return false;
+        }
+        
+        // King moves
+        if (piece.type === 'king') {
+            return Math.abs(rowDiff) <= 1 && Math.abs(colDiff) <= 1;
+        }
+        
+        return false;
+    }
+
+    #isPathClear(fromRow, fromCol, toRow, toCol) {
+        const rowStep = toRow > fromRow ? 1 : toRow < fromRow ? -1 : 0;
+        const colStep = toCol > fromCol ? 1 : toCol < fromCol ? -1 : 0;
+        
+        let currentRow = fromRow + rowStep;
+        let currentCol = fromCol + colStep;
+        
+        while (currentRow !== toRow || currentCol !== toCol) {
+            if (this.#board[currentRow][currentCol]) return false;
+            currentRow += rowStep;
+            currentCol += colStep;
+        }
+        
+        return true;
+    }
+
+    #makeMove(fromRow, fromCol, toRow, toCol) {
+        const piece = this.#board[fromRow][fromCol];
+        this.#board[toRow][toCol] = piece;
+        this.#board[fromRow][fromCol] = null;
+        
+        // Pawn promotion
+        if (piece.type === 'pawn' && (toRow === 0 || toRow === 7)) {
+            piece.type = 'queen';
+        }
+    }
+
+    #getAllValidMoves(color) {
+        const moves = [];
+        for (let row = 0; row < 8; row++) {
+            for (let col = 0; col < 8; col++) {
+                const piece = this.#board[row][col];
+                if (piece && piece.color === color) {
+                    for (let toRow = 0; toRow < 8; toRow++) {
+                        for (let toCol = 0; toCol < 8; toCol++) {
+                            const oldPlayer = this.#currentPlayer;
+                            this.#currentPlayer = color;
+                            if (this.#isValidMove(row, col, toRow, toCol)) {
+                                moves.push({ fromRow: row, fromCol: col, toRow, toCol });
+                            }
+                            this.#currentPlayer = oldPlayer;
+                        }
+                    }
+                }
+            }
+        }
+        return moves;
+    }
+
+    #evaluateMove(fromRow, fromCol, toRow, toCol) {
+        const pieceValues = { pawn: 1, knight: 3, bishop: 3, rook: 5, queen: 9, king: 100 };
+        let score = 0;
+        
+        const target = this.#board[toRow][toCol];
+        if (target) {
+            score += pieceValues[target.type] * 10;
+        }
+        
+        // Prefer center control
+        const centerDist = Math.abs(3.5 - toRow) + Math.abs(3.5 - toCol);
+        score += (7 - centerDist) * 0.5;
+        
+        return score;
+    }
+
+    #botMove() {
+        if (!this.playing) return;
+        
+        this.#isThinking = true;
+        const validMoves = this.#getAllValidMoves('black');
+        
+        if (validMoves.length === 0) {
+            this.stopGame();
+            return;
+        }
+        
+        const difficulty = this.getOpt("difficulty") / 10;
+        
+        // Simple AI: evaluate moves and pick best (or random for lower difficulty)
+        let bestMove = null;
         let bestScore = -Infinity;
-        const movesToConsider = this.difficulty === 2 ? Math.min(10, validMoves.length) : validMoves.length;
+        
+        const movesToConsider = Math.min(validMoves.length, Math.floor(difficulty * 2));
+        
         for (let i = 0; i < movesToConsider; i++) {
-          const move = this.difficulty === 2 ? validMoves[Math.floor(Math.random() * validMoves.length)] : validMoves[i];
-          const testBoard = this.board.map(row => [...row]);
-          const piece = testBoard[move.fromRow][move.fromCol];
-          const captured = testBoard[move.toRow][move.toCol];
-          testBoard[move.toRow][move.toCol] = piece;
-          testBoard[move.fromRow][move.fromCol] = null;
-          let score = this.evaluatePosition(testBoard);
-          if (captured) score += ({ pawn: 1, knight: 3, bishop: 3, rook: 5, queen: 9, king: 0 }[captured.type]) * (this.difficulty >= 4 ? 1.5 : 0.5);
-          if (piece.type === 'pawn' && move.toRow === 7) score += 8;
-          if (this.difficulty >= 4 && this.isKingInCheck(testBoard, "white")) score += 2;
-          score += (Math.random() - 0.5) * (this.difficulty === 1 ? 3 : this.difficulty === 2 ? 1 : this.difficulty === 3 ? 0.3 : 0.1);
-          if (score > bestScore) { bestScore = score; bestMove = move; }
+            const move = validMoves[Math.floor(Math.random() * validMoves.length)];
+            let score = this.#evaluateMove(move.fromRow, move.fromCol, move.toRow, move.toCol);
+            score += (Math.random() - 0.5) * (5 - difficulty);
+            
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = move;
+            }
         }
-      }
-      // do move
-      if (bestMove) {
-        const result = this.movePiece(bestMove.fromRow, bestMove.fromCol, bestMove.toRow, bestMove.toCol, this.board);
-        this.board = result.newBoard;
-        this.moveHistory.push("black " + result.piece.type + ": " + result.from + "-" + result.to);
-        this.isInCheck.white = this.isKingInCheck(this.board, "white");
-        this.isInCheck.black = this.isKingInCheck(this.board, "black");
-        const whiteHasMoves = this.getAllValidMoves(this.board, "white").length > 0;
-        if (this.isInCheck.white && !whiteHasMoves) this.gameStatus = "checkmate-black";
-        else if (!this.isInCheck.white && !whiteHasMoves) this.gameStatus = "stalemate";
-        else this.currentPlayer = "white";
-      }
-      this.isThinking = false;
-      this.animText = "Bot move!";
-      this.animCount = 40;
-    }, 400 + this.difficulty * 200);
-  }
-
-  // User click/touch support
-  onMouseDown(x, y) {
-    if (this.gameStatus !== "playing" || this.isThinking || this.currentPlayer !== "white") return;
-    const sz = Math.min(this.width, this.height) * 0.9;
-    const margin = (this.width - sz) / 2;
-    const cell = sz / 8;
-    // Get square
-    const col = Math.floor((x - margin) / cell);
-    const row = Math.floor((y - margin) / cell);
-    if (row < 0 || row > 7 || col < 0 || col > 7) return;
-    const piece = this.board[row][col];
-    if (this.selectedSquare) {
-      const [sr, sc] = this.selectedSquare;
-      if (this.isValidMove(sr, sc, row, col)) {
-        const result = this.movePiece(sr, sc, row, col, this.board);
-        this.board = result.newBoard;
-        this.moveHistory.push("white " + result.piece.type + ": " + result.from + "-" + result.to);
-        this.selectedSquare = null;
-        this.isInCheck.white = this.isKingInCheck(this.board, "white");
-        this.isInCheck.black = this.isKingInCheck(this.board, "black");
-        const blackHasMoves = this.getAllValidMoves(this.board, "black").length > 0;
-        if (this.isInCheck.black && !blackHasMoves) this.gameStatus = "checkmate-white";
-        else if (!this.isInCheck.black && !blackHasMoves) this.gameStatus = "stalemate";
-        else this.currentPlayer = "black";
-        // Bot moves after a short delay
-        setTimeout(() => this.makeBotMove(), 300);
-        this.animText = "You moved!";
-        this.animCount = 40;
-      } else if (piece && piece.color === "white") this.selectedSquare = [row, col];
-      else this.selectedSquare = null;
-    } else if (piece && piece.color === "white") this.selectedSquare = [row, col];
-  }
-
-  // Game rendering
-  onGameDraw(ctx, dt) {
-    ctx.save();
-    ctx.clearRect(0, 0, this.width, this.height);
-    const sz = Math.min(this.width, this.height) * 0.9;
-    const margin = (this.width - sz) / 2;
-    const cell = sz / 8;
-
-    // Draw board squares
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-      const isLight = (r + c) % 2 === 0;
-      ctx.fillStyle = isLight ? "#ffe4b5" : "#aa8451";
-      ctx.fillRect(margin + c * cell, margin + r * cell, cell, cell);
-
-      if (this.selectedSquare && this.selectedSquare[0] === r && this.selectedSquare[1] === c) {
-        ctx.strokeStyle = "#3399ff";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(margin + c * cell, margin + r * cell, cell, cell);
-      }
-      const piece = this.board[r][c];
-      if (piece) {
-        // If king in check, highlight
-        if (piece.type === 'king' && this.isInCheck[piece.color]) {
-          ctx.strokeStyle = "#ff3333";
-          ctx.lineWidth = 4;
-          ctx.strokeRect(margin + c * cell + 2, margin + r * cell + 2, cell - 4, cell - 4);
+        
+        if (bestMove) {
+            this.#makeMove(bestMove.fromRow, bestMove.fromCol, bestMove.toRow, bestMove.toCol);
+            this.#currentPlayer = 'white';
+            this.#isThinking = false;
+            
+            if (this.#isGameOver('white')) {
+                setTimeout(() => this.stopGame(), 500);
+            }
         }
-        ctx.font = cell * 0.7 + "px serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = piece.color === 'white' ? "#ffffff" : "#333333";
-        ctx.shadowColor = "rgba(0,0,0,0.3)";
-        ctx.shadowBlur = 4;
-        ctx.fillText(this.pieceSymbols[piece.color][piece.type], margin + c * cell + cell / 2, margin + r * cell + cell / 2);
-        ctx.shadowBlur = 0;
-      }
     }
 
-    // Game status dialog
-    ctx.font = "bold " + Math.max(cell * 0.5, 28) + "px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    let status = "";
-    if (this.isThinking) status = "Bot thinking...";
-    else if (this.gameStatus === "checkmate-white") status = "Checkmate! White wins!";
-    else if (this.gameStatus === "checkmate-black") status = "Checkmate! Black wins!";
-    else if (this.gameStatus === "stalemate") status = "Stalemate! Draw!";
-    else if (this.isInCheck[this.currentPlayer]) status = this.currentPlayer === "white" ? "Your king is in check!" : "Bot king is in check!";
-    else status = this.currentPlayer === "white" ? "Your turn" : "Bot's turn";
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "#19468e";
-    ctx.fillText(status, this.width / 2, margin - 42);
-
-    // Difficulty slider label
-    ctx.font = "bold 22px sans-serif";
-    ctx.fillStyle = "#1373b6";
-    ctx.fillText("Difficulty: " + this.difficultyLabels[this.difficulty], this.width / 2, margin - 18);
-
-    // Animation text
-    if (this.animCount > 0 && this.animText) {
-      ctx.font = "bold 30px sans-serif";
-      ctx.globalAlpha = Math.max(0, this.animCount / 40);
-      ctx.fillStyle = "#ffcc00";
-      ctx.fillText(this.animText, this.width / 2, margin + sz + 16);
-      this.animCount--;
+    #isGameOver(color) {
+        const moves = this.#getAllValidMoves(color);
+        return moves.length === 0;
     }
-    ctx.globalAlpha = 1;
 
-    // Move history panel (simple right side)
-    const mhx = margin + sz + 18, mhy = margin;
-    ctx.font = "bold 16px monospace";
-    ctx.fillStyle = "#333333";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText("Move History:", mhx, mhy);
-    for (let i = 0; i < Math.min(16, this.moveHistory.length); i++) {
-      ctx.font = "16px monospace";
-      ctx.fillStyle = "#222";
-      ctx.fillText((i + 1) + ". " + this.moveHistory[i], mhx, mhy + 24 + i * 18);
+    async onKeyDown(e) {
+        // ESC to deselect
+        if (e.code === 'Escape') {
+            this.#selectedSquare = null;
+        }
     }
-    ctx.restore();
-  }
+
+    async onKeyUp(e) {}
 }
 
 registerWidget(new ChessWidget());
